@@ -1,17 +1,20 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine 
     container_name: warehouseflow_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: warehouse_user
-      POSTGRES_PASSWORD: warehouse_pass
-      POSTGRES_DB: warehouseflow
+      POSTGRES_USER: ${DB_USER:-warehouse_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-warehouse_pass}
+      POSTGRES_DB: ${DB_NAME:-warehouseflow}
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database:/docker-entrypoint-initdb.d
+      # Mount the whole database folder to a neutral zone in the container
+      - ./database:/init_scripts:ro
+      # Map a single master script to the entrypoint to guarantee execution order
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
 volumes:
   postgres_data:

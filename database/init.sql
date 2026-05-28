@@ -1,0 +1,1 @@
+\i /init_scripts/schema.sql
