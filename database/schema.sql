@@ -29,3 +29,34 @@ CREATE TABLE orders (
         CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')),
     total_amount  NUMERIC(10,2)  NOT NULL DEFAULT 0.00 CHECK (total_amount >= 0)
 );
+
+-- Order Items: individual line items belonging to an order
+CREATE TABLE order_items (
+    order_item_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id      INT            NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+    product_id    INT            NOT NULL REFERENCES products(product_id) ON DELETE RESTRICT,
+    quantity      INT            NOT NULL CHECK (quantity > 0),
+    unit_price    NUMERIC(10,2)  NOT NULL CHECK (unit_price >= 0),
+
+    -- Prevents the same product from being added as two separate rows in the same order
+    CONSTRAINT unique_order_product UNIQUE (order_id, product_id)
+);
+
+-- Inventory Audit: automatic log of every stock level change
+CREATE TABLE inventory_audit (
+    audit_id      SERIAL PRIMARY KEY,
+    product_id    INT            NOT NULL REFERENCES products(product_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    old_quantity  INT            NOT NULL,
+    new_quantity  INT            NOT NULL,
+    changed_at    TIMESTAMP      NOT NULL DEFAULT NOW(),
+    reason        VARCHAR(255)
+);
+
+-- Price Audit: automatic log of every price change
+CREATE TABLE price_audit (
+    audit_id      SERIAL PRIMARY KEY,
+    product_id    INT            NOT NULL REFERENCES products(product_id),
+    old_price     NUMERIC(10,2)  NOT NULL,
+    new_price     NUMERIC(10,2)  NOT NULL,
+    changed_at    TIMESTAMP      NOT NULL DEFAULT NOW()
+);
