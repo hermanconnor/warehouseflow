@@ -2,6 +2,7 @@
 -- STORED PROCEDURES
 -- ============================================================
 
+-- Procedure 1 — create_order
 CREATE OR REPLACE PROCEDURE create_order(
     p_customer_id   INT,
     p_items_json    JSONB,
@@ -82,6 +83,7 @@ BEGIN
 END;
 $$;
 
+-- Procedure 2 — receive_inventory
 CREATE OR REPLACE PROCEDURE receive_inventory(
     p_product_id    INT,
     p_quantity      INT,
@@ -107,4 +109,28 @@ BEGIN
     WHERE product_id = p_product_id;
 
 END;
+$$;
+
+-- FUNCTION not a PROCEDURE — get_low_stock_products
+CREATE OR REPLACE FUNCTION get_low_stock_products(
+    p_threshold INT DEFAULT 10
+)
+RETURNS TABLE (
+    out_product_id    INT,
+    out_sku           VARCHAR(50),  
+    out_name          VARCHAR(255),
+    out_price         NUMERIC(10,2),
+    out_quantity_stock INT
+)
+LANGUAGE sql -- Changed to SQL for query-planner inlining optimization
+AS $$
+    SELECT
+        p.product_id,
+        p.sku,
+        p.name,
+        p.price,
+        p.quantity_in_stock
+    FROM products p
+    WHERE p.quantity_in_stock <= p_threshold
+    ORDER BY p.quantity_in_stock ASC;
 $$;
