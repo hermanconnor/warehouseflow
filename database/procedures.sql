@@ -134,3 +134,52 @@ AS $$
     WHERE p.quantity_in_stock <= p_threshold
     ORDER BY p.quantity_in_stock ASC;
 $$;
+
+-- FUNCTION not a PROCEDURE — get_monthly_sales
+CREATE OR REPLACE FUNCTION get_monthly_sales(
+    p_month INT,
+    p_year  INT
+)
+RETURNS TABLE (
+    out_product_id     INT,
+    out_product_name   VARCHAR(255),
+    out_total_units    BIGINT,
+    out_total_revenue  NUMERIC(10,2)
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_start_date TIMESTAMPTZ;
+    v_end_date   TIMESTAMPTZ;
+BEGIN
+    -- 1. Input Validation
+    IF p_month < 1 OR p_month > 12 THEN
+        RAISE EXCEPTION 'Month must be between 1 and 12. Received: %', p_month;
+    END IF;
+    
+    IF p_year < 1900 OR p_year > 2100 THEN
+        RAISE EXCEPTION 'Year is out of reasonable bounds. Received: %', p_year;
+    END IF;
+
+    -- 2. Build explicit date boundaries to exploit indexes
+    v_start_date := MAKE_TIMESTAMPTZ(p_year, p_month, 1, 0, 0, 0, 'UTC');
+    v_end_date   := v_start_date + INTERVAL '1 month';
+
+    -- 3. Execute efficient index-driven query
+    RETURN QUERY
+    SELECT
+        p.product_id,
+        p.name,
+        COALESCE(SUM(oi.quantity), 0)::BIGINT,
+        COALESCE(SUM(oi.quantity * oi.unit_price), 0)::NUMERIC(10,2)
+    FROM order_items oi
+    JOIN orders o ON o.order_id = oi.order_id
+    JOIN products p ON p.product_id = oi.product_id
+    WHERE
+        o.order_date >= v_start_date 
+        AND o.order_date < v_end_date -- Index Range Scan
+        AND o.status != 'cancelled'
+    GROUP BY p.product_id, p.name
+    ORDER BY 4 DESC; -- Orders by calculated revenue descending
+END;
+$$;
