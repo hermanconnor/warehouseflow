@@ -81,3 +81,30 @@ BEGIN
 
 END;
 $$;
+
+CREATE OR REPLACE PROCEDURE receive_inventory(
+    p_product_id    INT,
+    p_quantity      INT,
+    p_reason        VARCHAR(255) DEFAULT 'Supplier Shipment'
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- 1. Input Sanitization
+    IF p_quantity <= 0 THEN
+        RAISE EXCEPTION 'Quantity to receive must be greater than zero. Found: %', p_quantity;
+    END IF;
+
+    -- 2. Concurrently lock the row and verify existence 
+    -- Using FOR UPDATE here prevents a race condition if an order is trying to deduct stock at the same exact millisecond.
+    IF NOT EXISTS (SELECT 1 FROM products WHERE product_id = p_product_id FOR UPDATE) THEN
+        RAISE EXCEPTION 'Product % does not exist', p_product_id;
+    END IF;
+
+    -- 3. Execute the stock adjustment
+    UPDATE products
+    SET quantity_in_stock = quantity_in_stock + p_quantity
+    WHERE product_id = p_product_id;
+
+END;
+$$;
