@@ -38,9 +38,41 @@ BEGIN
 END;
 $$;
 
--- Trigger: Fires ONLY when quantity changes, preserving resources
+-- Fires ONLY when quantity changes, preserving resources
 CREATE OR REPLACE TRIGGER trg_inventory_audit
 AFTER UPDATE ON products
 FOR EACH ROW
 WHEN (OLD.quantity_in_stock IS DISTINCT FROM NEW.quantity_in_stock)
 EXECUTE FUNCTION fn_inventory_audit();
+
+-- Trigger Function 2: Log price changes to price_audit
+CREATE OR REPLACE FUNCTION fn_price_audit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- No internal IF statement required
+    -- The trigger definition guarantees this only runs when a change happens.
+    INSERT INTO price_audit (
+        product_id,
+        old_price,
+        new_price,
+        changed_at
+    )
+    VALUES (
+        NEW.product_id,
+        OLD.price,
+        NEW.price,
+        NOW()
+    );
+
+    RETURN NEW;
+END;
+$$;
+
+-- Fires ONLY when the price actually changes
+CREATE OR REPLACE TRIGGER trg_price_audit
+AFTER UPDATE ON products
+FOR EACH ROW
+WHEN (OLD.price IS DISTINCT FROM NEW.price) -- Intercepts changes early at the database level
+EXECUTE FUNCTION fn_price_audit();
