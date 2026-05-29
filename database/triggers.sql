@@ -101,3 +101,55 @@ BEFORE UPDATE ON products
 FOR EACH ROW
 WHEN (NEW.quantity_in_stock < 0) -- Intercepts the bad data immediately
 EXECUTE FUNCTION fn_prevent_negative_inventory();
+
+-- Trigger Function 4: Recompute order total when line items change
+CREATE OR REPLACE FUNCTION fn_update_order_total()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Case 1: The item was moved from one order to another (Cross-Order Update)
+    IF (TG_OP = 'UPDATE') AND (OLD.order_id IS DISTINCT FROM NEW.order_id) THEN
+        -- Recalculate the old order total
+        UPDATE orders
+        SET total_amount = (
+            SELECT COALESCE(SUM(quantity * unit_price), 0)
+            FROM order_items
+            WHERE order_id = OLD.order_id
+        )
+        WHERE order_id = OLD.order_id;
+
+        -- Recalculate the new order total
+        UPDATE orders
+        SET total_amount = (
+            SELECT COALESCE(SUM(quantity * unit_price), 0)
+            FROM order_items
+            WHERE order_id = NEW.order_id
+        )
+        WHERE order_id = NEW.order_id;
+
+    -- Case 2: Standard Insert, Delete, or non-moving Update
+    ELSE
+        UPDATE orders
+        SET total_amount = (
+            SELECT COALESCE(SUM(quantity * unit_price), 0)
+            FROM order_items
+            WHERE order_id = COALESCE(NEW.order_id, OLD.order_id)
+        )
+        WHERE order_id = COALESCE(NEW.order_id, OLD.order_id);
+    END IF;
+
+    -- Return Strategy based on operation type
+    IF (TG_OP = 'DELETE') THEN
+        RETURN OLD; -- Must return OLD on deletion
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+-- Trigger 
+CREATE OR REPLACE TRIGGER trg_update_order_total
+AFTER INSERT OR UPDATE OR DELETE ON order_items
+FOR EACH ROW
+EXECUTE FUNCTION fn_update_order_total();
