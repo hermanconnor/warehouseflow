@@ -76,3 +76,28 @@ AFTER UPDATE ON products
 FOR EACH ROW
 WHEN (OLD.price IS DISTINCT FROM NEW.price) -- Intercepts changes early at the database level
 EXECUTE FUNCTION fn_price_audit();
+
+-- Trigger Function 3: Block updates that would cause negative inventory
+-- Note: probably not needed due to CHECK constraint in products table, but it produces
+-- a far more descriptive error message with context about what the attempted change was
+CREATE OR REPLACE FUNCTION fn_prevent_negative_inventory()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- No internal IF required due to the trigger's WHEN clause
+    RAISE EXCEPTION 
+        'Inventory update rejected: product % would go negative. Current: %, Attempted final balance: %, Delta change: %',
+        NEW.product_id,
+        OLD.quantity_in_stock,
+        NEW.quantity_in_stock,
+        (NEW.quantity_in_stock - OLD.quantity_in_stock);
+END;
+$$;
+
+-- ONLY fires if an update tries to break the zero floor
+CREATE OR REPLACE TRIGGER trg_prevent_negative_inventory
+BEFORE UPDATE ON products
+FOR EACH ROW
+WHEN (NEW.quantity_in_stock < 0) -- Intercepts the bad data immediately
+EXECUTE FUNCTION fn_prevent_negative_inventory();
