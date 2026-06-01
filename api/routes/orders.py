@@ -20,7 +20,6 @@ async def create_order(
     items_payload = [item.model_dump() for item in request.items]
 
     try:
-       # 1. Execute the CALL with only the two IN parameters
         result = await db.fetchrow(
             "CALL create_order($1::int, $2::jsonb, $3);",
             request.customer_id,

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine 
+    image: postgres:16-alpine
     container_name: warehouseflow_db
     restart: unless-stopped
     environment:
@@ -11,10 +11,31 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Mount the whole database folder to a neutral zone in the container
       - ./database:/init_scripts:ro
-      # Map a single master script to the entrypoint to guarantee execution order
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-warehouse_user} -d ${DB_NAME:-warehouseflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .              
+      dockerfile: ./api/Dockerfile
+    container_name: warehouseflow_api
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      DB_USER: ${DB_USER:-warehouse_user}
+      DB_PASSWORD: ${DB_PASSWORD:-warehouse_pass}
+      DB_NAME: ${DB_NAME:-warehouseflow}
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:
