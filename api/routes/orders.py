@@ -20,20 +20,23 @@ async def create_order(
     items_payload = [item.model_dump() for item in request.items]
 
     try:
+       # 1. Execute the CALL with only the two IN parameters
         result = await db.fetchrow(
-            "CALL create_order($1, $2::jsonb, $3);",
+            "CALL create_order($1::int, $2::jsonb, $3);",
             request.customer_id,
-            json.dumps(items_payload)
+            json.dumps(items_payload),
+            None
         )
 
-        if not result or "out_order_id" not in result:
+        # 2. Check for your exact parameter name 'p_order_id'
+        if not result or "p_order_id" not in result:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Database failed to return a valid transaction confirmation identifier."
             )
 
-        new_order_id = result["out_order_id"]
-
+        # 3. Extract the new ID safely
+        new_order_id = result["p_order_id"]
         return OrderResponse(
             order_id=new_order_id,
             message=f"Order {new_order_id} created successfully."

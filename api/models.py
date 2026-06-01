@@ -1,12 +1,22 @@
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from typing import Any
+import asyncpg
 
 # --- Base Configuration ---
+
+
 class ResponseModel(BaseModel):
-    """Base model configured to read database attributes and asyncpg records automatically."""
-    model_config = ConfigDict(from_attributes=True)
+    """Base model configured to handle asyncpg records smoothly."""
+
+    @model_validator(mode='before')
+    @classmethod
+    def convert_asyncpg_record(cls, data: Any) -> Any:
+        # If the incoming data element is a raw asyncpg Record, cast it to a dictionary
+        if isinstance(data, asyncpg.Record):
+            return dict(data)
+        return data
 
 
 # --- Order Models ---
