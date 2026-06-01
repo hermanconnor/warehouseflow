@@ -1,7 +1,9 @@
-import asyncpg
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+import asyncpg
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, PostgresDsn
+from pydantic import Field
+from fastapi import FastAPI
 
 
 class DbSettings(BaseSettings):
@@ -25,6 +27,27 @@ settings = DbSettings()
 
 # This placeholder will hold the connection pool object globally within the app state
 db_pool: asyncpg.Pool | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manages the application database connection pool lifecycle."""
+    global db_pool
+
+    # 1. Everything BEFORE the yield runs on STARTUP
+    db_pool = await asyncpg.create_pool(
+        settings.database_url,
+        min_size=2,
+        max_size=10
+    )
+    print("🚀 Database connection pool initialized successfully.")
+
+    yield
+
+    # 2. Everything AFTER the yield runs on SHUTDOWN
+    if db_pool:
+        await db_pool.close()
+        print("🛑 Database connection pool closed gracefully.")
 
 
 async def get_db() -> AsyncGenerator[asyncpg.Connection, None]:
